@@ -31,8 +31,8 @@ export default function MultiConverter() {
   const [items, setItems] = useState([]); // {id, file, preview, status, downloadUrl?, downloadName?, error?}
   const [format, setFormat] = useState('webp');
   const [quality, setQuality] = useState(80);
-  const [width, setWidth] = useState(512);
-  const [height, setHeight] = useState(512);
+  const [width, setWidth] = useState(1920);
+  const [height, setHeight] = useState(1024);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef(null);
