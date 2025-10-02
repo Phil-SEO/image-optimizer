@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { FaImage } from 'react-icons/fa';
-import { MdOutlineDeleteOutline, MdDarkMode, MdLightMode } from 'react-icons/md';
+import { MdOutlineDeleteOutline } from 'react-icons/md';
 import { HiDownload } from 'react-icons/hi';
 import { RiImage2Line, RiSparklingFill } from 'react-icons/ri';
 import { IoMdReturnRight } from 'react-icons/io';
@@ -15,8 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
-const gradientBtnStyle = `
+const customStyles = `
   .gradient-btn {
     background-image: linear-gradient(108deg, #4F5156 0%, #676A70 50%, #4F5156 100%);
     background-size: 200% 100%;
@@ -25,6 +26,13 @@ const gradientBtnStyle = `
   .gradient-btn:hover {
     background-position: -100% 0;
   }
+  /* Custom Switch Styles */
+  .custom-switch[data-state="unchecked"] {
+    background-color: #4F5156 !important;
+  }
+  .custom-switch[data-state="checked"] {
+    background-color: #2563eb !important; /* Blue-600 */
+  }
 `;
 
 export default function MultiConverter() {
@@ -32,7 +40,8 @@ export default function MultiConverter() {
   const [format, setFormat] = useState('webp');
   const [quality, setQuality] = useState(80);
   const [width, setWidth] = useState(1920);
-  const [height, setHeight] = useState(1024);
+  const [height, setHeight] = useState(1080);
+  const [adaptiveSizing, setAdaptiveSizing] = useState(true);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef(null);
@@ -64,7 +73,6 @@ export default function MultiConverter() {
         const list = Array.isArray(data?.supported) ? data.supported : [];
         if (cancelled) return;
         setFormats(list);
-        // Ensure current format is valid; prefer webp if available
         setFormat(f => list.includes(f) ? f : (list.includes('webp') ? 'webp' : (list[0] || '')));
       } catch (e) {
         if (!cancelled) setFormatsError('Failed to load supported formats');
@@ -102,13 +110,6 @@ export default function MultiConverter() {
     });
   }
 
-  function clearResults() {
-    setItems(prev => prev.map(i => {
-      if (i.downloadUrl) URL.revokeObjectURL(i.downloadUrl);
-      return { ...i, status: 'idle', downloadUrl: null, downloadName: '', error: null };
-    }));
-  }
-
   function clearAll() {
     items.forEach(i => {
       if (i.downloadUrl) URL.revokeObjectURL(i.downloadUrl);
@@ -123,12 +124,17 @@ export default function MultiConverter() {
       const form = new FormData();
       form.append('file', item.file, item.file.name);
 
-      const qs = new URLSearchParams({
+      const params = {
         format,
         quality: String(quality),
-        ...(width ? { w: String(width) } : {}),
-        ...(height ? { h: String(height) } : {}),
-      });
+      };
+
+      if (!adaptiveSizing) {
+        if (width) params.w = String(width);
+        if (height) params.h = String(height);
+      }
+
+      const qs = new URLSearchParams(params);
 
       const res = await fetch(`/api/convert?${qs}`, { method: 'POST', body: form });
       if (!res.ok) throw new Error(await res.text());
@@ -146,19 +152,16 @@ export default function MultiConverter() {
   }
 
   async function onConvertAll() {
-    clearResults();
     setBusy(true);
     try {
       const queue = [...items];
       const CONCURRENCY = 4;
-
       const workers = Array.from({ length: CONCURRENCY }, async () => {
         while (queue.length) {
           const next = queue.shift();
           if (next) await convertOne(next);
         }
       });
-
       await Promise.allSettled(workers);
     } finally {
       setBusy(false);
@@ -196,7 +199,7 @@ export default function MultiConverter() {
 
   return (
     <>
-      <style>{gradientBtnStyle}</style>
+      <style>{customStyles}</style>
       <main className="min-h-screen bg-[linear-gradient(108deg,#151517_0%,#121215_50%,#111014_75%,#0F0E13_100%)] text-gray-100">
         <nav className="w-full z-50 bg-[#17171A]/80 backdrop-blur-md border-b border-[#4F5156] sticky top-0">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 p-3">
@@ -211,104 +214,98 @@ export default function MultiConverter() {
               onDragOver={(e) => { prevent(e); setDragOver(true); }}
               onDragEnter={() => setDragOver(true)}
               onDragLeave={() => setDragOver(false)}
-              className={[
-                'p-8 text-center cursor-pointer transition-colors duration-300 rounded-sm',
-                dragOver ? 'bg-[#1B1B1F]' : ''
-              ].join(' ')}
+              className={`p-8 text-center cursor-pointer transition-colors duration-300 rounded-sm ${dragOver ? 'bg-[#1B1B1F]' : ''}`}
               onClick={() => fileRef.current?.click()}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && fileRef.current?.click()}
             >
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={onPickFiles}
-                className="hidden"
-              />
+              <input ref={fileRef} type="file" accept="image/*" multiple onChange={onPickFiles} className="hidden" />
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-md bg-[#121215] text-[#4F5156] border border-[#4F5156] transition-transform group-hover:scale-105">
                 <FaImage size={24} />
               </div>
               <p className="m-0 text-base text-gray-200">
                 <span className="font-semibold">Drag & drop images</span> or <span className="underline underline-offset-2">browse files</span>
               </p>
-              <p className="mt-2 text-xs text-[#4F5156]">
-                Files are processed in your browser. No data is uploaded.
-              </p>
+              <p className="mt-2 text-xs text-[#4F5156]">Files are processed in your browser. No data is uploaded.</p>
             </div>
           </div>
 
           <div className="bg-[#17171A] border border-[#4F5156] rounded-sm w-full p-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-start">
               <div className="grid gap-2">
                 <span className="text-sm font-medium text-gray-400">Format</span>
-                <Select
-                  value={format}
-                  onValueChange={setFormat}
-                  disabled={formatsLoading || !formats.length}
-                >
+                <Select value={format} onValueChange={setFormat} disabled={formatsLoading || !formats.length}>
                   <SelectTrigger className="w-full bg-[#1B1B1F] border border-[#4F5156] rounded-sm p-2 text-gray-100 focus:ring-0 focus:ring-offset-0">
-                    <SelectValue placeholder={formatsLoading ? "Loading formats..." : "Select format"} />
+                    <SelectValue placeholder={formatsLoading ? "Loading..." : "Select format"} />
                   </SelectTrigger>
                   <SelectContent className="bg-[#17171A] border border-[#4F5156] text-gray-100">
                     {formats.map(fmt => (
-                      <SelectItem
-                        key={fmt}
-                        value={fmt}
-                        className="cursor-pointer focus:bg-[#232426]"
-                      >
-                        {fmt === 'jpeg' ? 'JPEG / JPG' : fmt.toUpperCase()}
+                      <SelectItem key={fmt} value={fmt} className="cursor-pointer focus:bg-[#232426]">
+                        {fmt.toUpperCase()}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {formatsError && (
-                  <p className="text-xs text-red-400 mt-1">{formatsError}</p>
-                )}
+                {formatsError && <p className="text-xs text-red-400 mt-1">{formatsError}</p>}
               </div>
 
-              <label className="grid gap-2 col-span-2 md:col-span-1">
+              <label className="grid gap-2">
                 <span className="text-sm font-medium text-gray-400">Quality: <b>{quality}</b></span>
                 <input
                   type="range"
-                  min="0"
+                  min="10"
                   max="100"
-                  step="10"
+                  step="5"
                   value={quality}
                   onChange={e => setQuality(Number(e.target.value))}
                   className="w-full h-2 bg-[#1B1B1F] rounded-lg appearance-none cursor-pointer accent-[#676A70]"
                 />
               </label>
 
-              <label className="grid gap-2">
-                <span className="text-sm font-medium text-gray-400">Width</span>
-                <div className="bg-[#1B1B1F] border border-[#4F5156] rounded-sm">
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="Auto"
-                    value={width}
-                    onChange={e => setWidth(Number(e.target.value) || 0)}
-                    className="w-full bg-transparent p-2 text-gray-100 focus:ring-0 border-none"
+              <div className="grid gap-4 col-span-2">
+                <div className="flex items-center justify-between bg-[#1B1B1F] border border-[#4F5156] rounded-sm p-2">
+                  <label htmlFor="adaptive-switch" className="text-sm font-medium text-gray-400 pr-2 cursor-pointer">
+                    Adaptive Sizing
+                  </label>
+                  <Switch
+                    id="adaptive-switch"
+                    checked={adaptiveSizing}
+                    onCheckedChange={setAdaptiveSizing}
+                    className="custom-switch"
                   />
                 </div>
-              </label>
-
-              <label className="grid gap-2">
-                <span className="text-sm font-medium text-gray-400">Height</span>
-                <div className="bg-[#1B1B1F] border border-[#4F5156] rounded-sm">
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="Auto"
-                    value={height}
-                    onChange={e => setHeight(Number(e.target.value) || 0)}
-                    className="w-full bg-transparent p-2 text-gray-100 focus:ring-0 border-none"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="grid gap-2">
+                    <span className={`text-sm font-medium transition-colors ${adaptiveSizing ? 'text-gray-600' : 'text-gray-400'}`}>Width (px)</span>
+                    <div className={`bg-[#1B1B1F] border border-[#4F5156] rounded-sm transition-opacity ${adaptiveSizing ? 'opacity-50' : ''}`}>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="Auto"
+                        value={width}
+                        onChange={e => setWidth(Number(e.target.value) || 0)}
+                        className="w-full bg-transparent p-2 text-gray-100 focus:ring-0 border-none disabled:cursor-not-allowed"
+                        disabled={adaptiveSizing}
+                      />
+                    </div>
+                  </label>
+                  <label className="grid gap-2">
+                    <span className={`text-sm font-medium transition-colors ${adaptiveSizing ? 'text-gray-600' : 'text-gray-400'}`}>Height (px)</span>
+                    <div className={`bg-[#1B1B1F] border border-[#4F5156] rounded-sm transition-opacity ${adaptiveSizing ? 'opacity-50' : ''}`}>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="Auto"
+                        value={height}
+                        onChange={e => setHeight(Number(e.target.value) || 0)}
+                        className="w-full bg-transparent p-2 text-gray-100 focus:ring-0 border-none disabled:cursor-not-allowed"
+                        disabled={adaptiveSizing}
+                      />
+                    </div>
+                  </label>
                 </div>
-              </label>
+              </div>
             </div>
 
             <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-[#4F5156] pt-4">
@@ -318,14 +315,9 @@ export default function MultiConverter() {
                 className={`w-40 h-10 rounded-sm text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-100 flex items-center justify-center gap-2 cursor-pointer ${(items.length && !busy) ? 'gradient-btn text-gray-900' : 'bg-[#232426] text-[#4F5156]'}`}
                 disabled={!items.length || busy}
               >
-                {busy ? (
-                  <CgSpinner className="h-5 w-5 animate-spin-fast" />
-                ) : (
-                  <RiSparklingFill className="h-5 w-5" />
-                )}
+                {busy ? <CgSpinner className="h-5 w-5 animate-spin-fast" /> : <RiSparklingFill className="h-5 w-5" />}
                 {busy ? 'Converting...' : `Convert (${items.length})`}
               </button>
-
               <button
                 type="button"
                 onClick={downloadAll}
@@ -335,7 +327,6 @@ export default function MultiConverter() {
                 <HiDownload size={18} />
                 <span>Download All ({doneCount})</span>
               </button>
-
               <button
                 type="button"
                 onClick={clearAll}
@@ -359,40 +350,18 @@ export default function MultiConverter() {
                     <div className="min-w-0 truncate text-sm font-medium text-gray-300" title={item.file.name}>
                       {item.file.name}
                     </div>
-
                     <div className="ml-auto flex items-center gap-2">
                       <StatusBadge status={item.status} />
-
                       {item.status === 'done' && item.downloadUrl ? (
-                        <a
-                          href={item.downloadUrl}
-                          download={item.downloadName || 'output'}
-                          title="Download"
-                          aria-label="Download"
-                          className="text-[#4F5156] hover:text-gray-200 transition-colors"
-                        >
+                        <a href={item.downloadUrl} download={item.downloadName || 'output'} title="Download" aria-label="Download" className="text-[#4F5156] hover:text-gray-200 transition-colors">
                           <HiDownload size={20} />
                         </a>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => convertOne(item)}
-                          disabled={item.status === 'converting' || busy}
-                          title="Convert this file"
-                          className="text-[#4F5156] hover:text-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
+                        <button type="button" onClick={() => convertOne(item)} disabled={item.status === 'converting' || busy} title="Convert this file" className="text-[#4F5156] hover:text-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                           <IoMdReturnRight size={20} />
                         </button>
                       )}
-
-                      <button
-                        type="button"
-                        onClick={() => removeItem(item.id)}
-                        disabled={busy}
-                        title="Remove"
-                        aria-label="Remove"
-                        className="text-[#4F5156] hover:text-red-400 transition-colors disabled:opacity-50"
-                      >
+                      <button type="button" onClick={() => removeItem(item.id)} disabled={busy} title="Remove" aria-label="Remove" className="text-[#4F5156] hover:text-red-400 transition-colors disabled:opacity-50">
                         <MdOutlineDeleteOutline size={20} />
                       </button>
                     </div>
